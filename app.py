@@ -573,14 +573,177 @@ if st.session_state.resultado:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-    # Preview tabela alterados
-    with st.expander("🔍 Ver amostra dos Alterados", expanded=False):
-        alt = conc[conc["tipo_movimentacao"] == "🟡 ALTERADO"][[
-            "id_cobranca","campos_alterados",
-            "status_pagamento_ant","status_pagamento_atu",
-            "contas_a_receber_ant","contas_a_receber_atu","var_contas_a_receber"
-        ]].head(50)
-        st.dataframe(alt, use_container_width=True, hide_index=True)
+    st.markdown("---")
+
+    # ── Gráfico: distribuição de status_pagamento_atu ──────────────────────
+    st.markdown("### 📊 Distribuição por Status — Mês Atual")
+
+    df_status = df_atu.copy()
+    df_status["status_pagamento"] = df_status["status_pagamento"].replace("", "(sem status — em aberto)")
+    contagem = df_status["status_pagamento"].value_counts().reset_index()
+    contagem.columns = ["Status", "Quantidade"]
+
+    # Cores por status
+    CORES_STATUS = {
+        "liquidado":                  "#1A7F3C",
+        "pagamento_parcial":          "#E65100",
+        "original_liquidado":         "#1565C0",
+        "(sem status — em aberto)":   "#6B7A99",
+    }
+    contagem["cor"] = contagem["Status"].map(lambda x: CORES_STATUS.get(x, "#9E9E9E"))
+
+    col_graf, col_tab = st.columns([3, 2])
+
+    with col_graf:
+        import plotly.graph_objects as go
+
+        fig = go.Figure(go.Bar(
+            x=contagem["Status"],
+            y=contagem["Quantidade"],
+            marker_color=contagem["cor"].tolist(),
+            text=contagem["Quantidade"].apply(lambda v: f"{v:,}"),
+            textposition="outside",
+            textfont=dict(size=13, family="Inter, sans-serif"),
+        ))
+        fig.update_layout(
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            margin=dict(t=20, b=40, l=20, r=20),
+            height=360,
+            xaxis=dict(
+                tickfont=dict(size=12, family="Inter, sans-serif"),
+                showgrid=False,
+                linecolor="#E8EDF5",
+            ),
+            yaxis=dict(
+                tickfont=dict(size=11, family="Inter, sans-serif"),
+                gridcolor="#F0F4FA",
+                showgrid=True,
+                zeroline=False,
+            ),
+            bargap=0.35,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col_tab:
+        st.markdown("<br>", unsafe_allow_html=True)
+        total = contagem["Quantidade"].sum()
+        contagem["%"] = (contagem["Quantidade"] / total * 100).round(1).astype(str) + "%"
+        st.dataframe(
+            contagem[["Status", "Quantidade", "%"]],
+            use_container_width=True,
+            hide_index=True,
+            height=320,
+        )
+
+    st.markdown("---")
+
+    # ── Filtros e tabela: Campos Alterados ────────────────────────────────
+    st.markdown("### 🔍 Explorar Cobranças Alteradas")
+
+    conc_alt = conc[conc["tipo_movimentacao"] == "🟡 ALTERADO"].copy()
+
+    if conc_alt.empty:
+        st.info("Nenhuma cobrança alterada nesta conciliação.")
+    else:
+        # Opções de campos alterados (multiselect)
+        todas_opcoes = sorted(set(
+            campo.strip()
+            for val in conc_alt["campos_alterados"]
+            for campo in val.split("|")
+            if campo.strip() and campo.strip() != "—"
+        ))
+
+        col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
+
+        with col_f1:
+            campos_sel = st.multiselect(
+                "Filtrar por campo alterado",
+                options=todas_opcoes,
+                default=[],
+                placeholder="Todos os campos...",
+            )
+
+        with col_f2:
+            status_opcoes = sorted(conc_alt["status_pagamento_atu"].unique().tolist())
+            status_sel = st.multiselect(
+                "Filtrar por status atual",
+                options=status_opcoes,
+                default=[],
+                placeholder="Todos os status...",
+            )
+
+        with col_f3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            var_neg = st.checkbox("Só variação negativa em CAR", value=False)
+
+        # Aplicar filtros
+        df_filtrado = conc_alt.copy()
+
+        if campos_sel:
+            df_filtrado = df_filtrado[
+                df_filtrado["campos_alterados"].apply(
+                    lambda x: any(c in x for c in campos_sel)
+                )
+            ]
+
+        if status_sel:
+            df_filtrado = df_filtrado[
+                df_filtrado["status_pagamento_atu"].isin(status_sel)
+            ]
+
+        if var_neg:
+            df_filtrado = df_filtrado[df_filtrado["var_contas_a_receber"] < 0]
+
+        # Contador
+        st.markdown(
+            f"<p style='font-size:13px;color:#6B7A99;margin:8px 0 12px;'>"
+            f"Exibindo <b>{len(df_filtrado):,}</b> de <b>{len(conc_alt):,}</b> cobranças alteradas</p>",
+            unsafe_allow_html=True,
+        )
+
+        # Tabela
+        COLUNAS_EXIBIR = [
+            "id_cobranca",
+            "campos_alterados",
+            "status_pagamento_ant",
+            "status_pagamento_atu",
+            "valor_pago_ant",
+            "valor_pago_atu",
+            "var_valor_pago",
+            "valor_excedente_pago_ant",
+            "valor_excedente_pago_atu",
+            "var_excedente_pago",
+            "contas_a_receber_ant",
+            "contas_a_receber_atu",
+            "var_contas_a_receber",
+        ]
+
+        RENOMEAR = {
+            "id_cobranca":              "ID Cobrança",
+            "campos_alterados":         "Campos Alterados",
+            "status_pagamento_ant":     f"Status ({label_ant})",
+            "status_pagamento_atu":     f"Status ({label_atu})",
+            "valor_pago_ant":           "Valor Pago Ant.",
+            "valor_pago_atu":           "Valor Pago Atu.",
+            "var_valor_pago":           "Var. Valor Pago",
+            "valor_excedente_pago_ant": "Excedente Ant.",
+            "valor_excedente_pago_atu": "Excedente Atu.",
+            "var_excedente_pago":       "Var. Excedente",
+            "contas_a_receber_ant":     "CAR Ant.",
+            "contas_a_receber_atu":     "CAR Atu.",
+            "var_contas_a_receber":     "Var. CAR",
+        }
+
+        df_exibir = df_filtrado[COLUNAS_EXIBIR].rename(columns=RENOMEAR)
+
+        # Formatar colunas numéricas
+        num_cols = [c for c in df_exibir.columns if c not in ("ID Cobrança","Campos Alterados",f"Status ({label_ant})",f"Status ({label_atu})")]
+        df_fmt = df_exibir.copy()
+        for c in num_cols:
+            df_fmt[c] = df_fmt[c].apply(lambda v: f"R$ {v:,.2f}" if pd.notna(v) else "")
+
+        st.dataframe(df_fmt, use_container_width=True, hide_index=True, height=420)
 
 # ── Rodapé ─────────────────────────────────────────────────────────────────
 st.markdown("<br><br>", unsafe_allow_html=True)
