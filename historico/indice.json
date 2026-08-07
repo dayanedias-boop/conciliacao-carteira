@@ -1,0 +1,15 @@
+[
+  {
+    "arquivo": "Conciliacao_base_julho_20260807_0006.xlsx",
+    "data": "07/08/2026 00:06",
+    "label_ant": "base_junho",
+    "label_atu": "base_julho",
+    "total": 110908,
+    "novos": 20216,
+    "saiu": 16,
+    "alterados": 12238,
+    "sem_mov": 78438,
+    "car_ant": 30090339.23,
+    "car_atu": 34920720.84
+  }
+]
