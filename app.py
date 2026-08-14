@@ -1,12 +1,9 @@
 """
 Carteira de Direitos Creditórios — SCD
-App unificado: Conciliação + PDD C5
 """
-
 import io, re, logging, base64, json, datetime, requests
 from datetime import datetime
 from pathlib import Path
-
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -16,47 +13,18 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 import plotly.graph_objects as go
 
-st.set_page_config(
-    page_title="Carteira DC — SCD",
-    page_icon="🏦",
-    layout="wide",
-)
-
-# ══════════════════════════════════════════════════════════════
-# FUNÇÕES — CONCILIAÇÃO
-# ══════════════════════════════════════════════════════════════
-"""
-Conciliação de Carteira — Direitos Creditórios
-"""
-
-import io, base64, json, datetime, requests
-import streamlit as st
-import pandas as pd
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
-from pathlib import Path
-import plotly.graph_objects as go
+st.set_page_config(page_title="Carteira DC — SCD", page_icon="🏦", layout="wide")
 
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-.main { background: #F7F9FC; }
 .hero {
     background: linear-gradient(135deg, #1F3864 0%, #2F5496 100%);
-    border-radius: 16px; padding: 36px 48px; color: white; margin-bottom: 28px;
+    border-radius: 14px; padding: 28px 40px; color: white; margin-bottom: 20px;
 }
-.hero h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px 0; }
-.hero p  { font-size: 14px; opacity: 0.8; margin: 0; }
-.card {
-    background: white; border-radius: 12px; padding: 20px 24px;
-    border: 1px solid #E8EDF5; margin-bottom: 12px;
-    box-shadow: 0 1px 4px rgba(31,56,100,0.06);
-}
-.card h3 { font-size: 13px; font-weight: 600; color: #1F3864; margin: 0 0 3px 0;
-           text-transform: uppercase; letter-spacing: 0.5px; }
-.card p  { font-size: 12px; color: #6B7A99; margin: 0; }
+.hero h1 { font-size: 24px; font-weight: 700; margin: 0 0 4px 0; }
+.hero p  { font-size: 13px; opacity: 0.8; margin: 0; }
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 20px 0; }
 .stat { border-radius: 12px; padding: 18px 20px; border: 1px solid #E8EDF5; }
 .stat .num { font-size: 26px; font-weight: 700; line-height: 1; }
@@ -76,27 +44,31 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .fin-item .fin-val.pos { color:#1A7F3C; }
 .fin-item .fin-val.neg { color:#C92A2A; }
 .hist-row { display:flex; align-items:center; gap:12px; padding:12px 16px;
-            background:white; border-radius:10px; border:1px solid #E8EDF5;
-            margin-bottom:8px; }
+            background:white; border-radius:10px; border:1px solid #E8EDF5; margin-bottom:8px; }
 .hist-data { font-size:11px; color:#8898AA; min-width:90px; }
 .hist-label { font-size:13px; font-weight:600; color:#1F3864; flex:1; }
 .hist-badge { font-size:11px; padding:3px 10px; border-radius:20px;
               background:#EEF3FB; color:#2F5496; font-weight:600; }
-.stButton > button {
-    background: linear-gradient(135deg,#1F3864,#2F5496) !important;
-    color:white !important; border:none !important; border-radius:10px !important;
-    padding:10px 28px !important; font-size:14px !important; font-weight:600 !important;
-    width:100% !important;
+.hist-val { font-size:11px; color:#2E4189; font-weight:600;
+            background:#EEF3FB; padding:2px 8px; border-radius:12px; }
+.main-header {
+    background: linear-gradient(135deg, #1F2D5A 0%, #2E4189 100%);
+    color: white; padding: 1.2rem 1.8rem; border-radius: 10px; margin-bottom: 1.2rem;
 }
-.stDownloadButton > button {
-    background: linear-gradient(135deg,#1A7F3C,#2E9E56) !important;
-    color:white !important; border:none !important; border-radius:10px !important;
-    padding:10px 28px !important; font-size:14px !important; font-weight:600 !important;
-    width:100% !important;
-}
+.main-header h1 { color: white; margin: 0; font-size: 1.3rem; }
+.main-header p  { color: #D6DCF0; margin: 0.2rem 0 0; font-size: 0.8rem; }
 </style>
 """, unsafe_allow_html=True)
 
+
+st.markdown("""
+<div class="hero">
+  <h1>🏦 Carteira de Direitos Creditórios — SCD</h1>
+  <p>BCB 352 / Resolução BCB nº 4.966/2021</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ── FUNÇÕES CONCILIAÇÃO ─────────────────────────────────────────────
 # ── GitHub ──────────────────────────────────────────────────────────────────
 def github_headers():
     token = st.secrets.get("GITHUB_TOKEN", "")
@@ -385,37 +357,7 @@ def gerar_excel_bytes(conc,df_ant,df_atu,label_ant,label_atu):
 # ── Interface ────────────────────────────────────────────────────────────────
 
 
-# ══════════════════════════════════════════════════════════════
-# FUNÇÕES — PDD C5
-# ══════════════════════════════════════════════════════════════
-"""
-PDD Carteira C5 — SCD | Interface Streamlit
-BCB 352 / Resolução BCB nº 4.966/2021
-"""
-
-"""
-╔══════════════════════════════════════════════════════════════════════╗
-║   PDD CARTEIRA C5 — SCD  |  INTERFACE STREAMLIT                     ║
-║   BCB 352 / Resolução BCB nº 4.966/2021                              ║
-╚══════════════════════════════════════════════════════════════════════╝
-
-Instalação:
-    pip install streamlit pandas openpyxl xlrd
-
-Execução:
-    streamlit run app_pdd_c5.py
-"""
-
-import io, re, logging, base64, json
-from datetime import datetime
-from pathlib import Path
-
-import pandas as pd
-import numpy as np
-import streamlit as st
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-
+# ── FUNÇÕES PDD C5 ──────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════
 # TABELAS NORMATIVAS — NÃO ALTERAR SEM FUNDAMENTAÇÃO NORMATIVA
 # ══════════════════════════════════════════════════════════════════════
@@ -914,33 +856,11 @@ def gerar_excel_bytes(df, data_base):
     return buf.read()
 
 
-# ══════════════════════════════════════════════════════════════
-# INTERFACE PRINCIPAL — ABAS
-# ══════════════════════════════════════════════════════════════
-
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-.hero {
-    background: linear-gradient(135deg, #1F3864 0%, #2F5496 100%);
-    border-radius: 14px; padding: 32px 48px; color: white; margin-bottom: 24px;
-}
-.hero h1 { font-size: 26px; font-weight: 700; margin: 0 0 6px 0; }
-.hero p  { font-size: 14px; opacity: 0.8; margin: 0; }
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="hero">
-  <h1>🏦 Carteira de Direitos Creditórios — SCD</h1>
-  <p>BCB 352 / Resolução BCB nº 4.966/2021</p>
-</div>
-""", unsafe_allow_html=True)
-
+# ── INTERFACE: ABAS ─────────────────────────────────────────────────
 tab1, tab2 = st.tabs(["🔄  Conciliação de Carteira", "📊  PDD Carteira C5"])
 
 with tab1:
+
     with st.sidebar:
         st.markdown("## 📁 Histórico de Conciliações")
         tem_secrets = "GITHUB_TOKEN" in st.secrets and "GITHUB_REPO" in st.secrets
