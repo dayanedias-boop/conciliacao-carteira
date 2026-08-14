@@ -11,13 +11,6 @@ from openpyxl.utils import get_column_letter
 from pathlib import Path
 import plotly.graph_objects as go
 
-st.set_page_config(
-    page_title="Conciliação — Carteira DC",
-    page_icon="🔄",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
