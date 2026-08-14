@@ -523,11 +523,6 @@ def gerar_excel_bytes(df, data_base):
 # INTERFACE STREAMLIT
 # ══════════════════════════════════════════════════════════════════════
 
-st.set_page_config(
-    page_title="PDD Carteira C5 — SCD",
-    page_icon="📊",
-    layout="wide",
-)
 
 # Estilo customizado
 st.markdown("""
@@ -772,4 +767,3 @@ with st.expander("ℹ️ Sobre as premissas e regras aplicadas"):
 - E2: `TJE = (1/(1-deságio%))^(365/{PRAZO_E2_DIAS}) - 1`
 - E3/POCI: `TJE = ratio^(365/{PRAZO_E3_DIAS}) - 1` onde `ratio = (1-PECLD%)/(1-deságio%)`
     """)
-
