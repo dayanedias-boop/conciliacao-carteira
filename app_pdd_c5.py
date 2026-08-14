@@ -1,4 +1,9 @@
 """
+PDD Carteira C5 — SCD | Interface Streamlit
+BCB 352 / Resolução BCB nº 4.966/2021
+"""
+
+"""
 ╔══════════════════════════════════════════════════════════════════════╗
 ║   PDD CARTEIRA C5 — SCD  |  INTERFACE STREAMLIT                     ║
 ║   BCB 352 / Resolução BCB nº 4.966/2021                              ║
@@ -11,7 +16,7 @@ Execução:
     streamlit run app_pdd_c5.py
 """
 
-import io, re, logging
+import io, re, logging, base64, json
 from datetime import datetime
 from pathlib import Path
 
@@ -518,30 +523,161 @@ def gerar_excel_bytes(df, data_base):
     buf.seek(0)
     return buf.read()
 
+# ══════════════════════════════════════════════════════════════════════
+# GITHUB — HISTÓRICO PDD
+# ══════════════════════════════════════════════════════════════════════
+
+import base64, json, requests as _requests
+
+def _gh_headers():
+    token = st.secrets.get("GITHUB_TOKEN", "")
+    return {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+
+def _gh_repo():
+    return st.secrets.get("GITHUB_REPO", "")
+
+def _tem_secrets():
+    return "GITHUB_TOKEN" in st.secrets and "GITHUB_REPO" in st.secrets
+
+def salvar_pdd_github(nome_arquivo, excel_bytes, resumo_json):
+    """Salva Excel em historico_pdd/ e atualiza indice_pdd.json."""
+    repo = _gh_repo(); hdrs = _gh_headers()
+    conteudo_b64 = base64.b64encode(excel_bytes).decode()
+
+    # 1. Salvar Excel
+    url_xlsx = f"https://api.github.com/repos/{repo}/contents/historico_pdd/{nome_arquivo}"
+    r_check  = _requests.get(url_xlsx, headers=hdrs, timeout=10)
+    payload  = {"message": f"PDD: {nome_arquivo}", "content": conteudo_b64}
+    if r_check.status_code == 200:
+        payload["sha"] = r_check.json()["sha"]
+    r = _requests.put(url_xlsx, headers=hdrs, json=payload, timeout=60)
+    if r.status_code not in (200, 201):
+        return False, f"Erro ao salvar Excel: {r.status_code} — {r.text[:200]}"
+
+    # 2. Atualizar índice JSON
+    idx_url = f"https://api.github.com/repos/{repo}/contents/historico_pdd/indice_pdd.json"
+    r_idx   = _requests.get(idx_url, headers=hdrs, timeout=10)
+    registros = []; idx_sha = None
+    if r_idx.status_code == 200:
+        try:
+            registros = json.loads(base64.b64decode(r_idx.json()["content"]).decode())
+            idx_sha   = r_idx.json()["sha"]
+        except Exception:
+            registros = []
+    registros.insert(0, resumo_json)
+    registros = registros[:50]
+    payload_idx = {
+        "message": f"Índice PDD atualizado: {nome_arquivo}",
+        "content": base64.b64encode(
+            json.dumps(registros, ensure_ascii=False, indent=2).encode()
+        ).decode(),
+    }
+    if idx_sha:
+        payload_idx["sha"] = idx_sha
+    r2 = _requests.put(idx_url, headers=hdrs, json=payload_idx, timeout=15)
+    if r2.status_code not in (200, 201):
+        return False, f"Erro ao atualizar índice: {r2.status_code}"
+    return True, "ok"
+
+def carregar_indice_pdd():
+    url = f"https://api.github.com/repos/{_gh_repo()}/contents/historico_pdd/indice_pdd.json"
+    r   = _requests.get(url, headers=_gh_headers(), timeout=10)
+    if r.status_code != 200:
+        return []
+    try:
+        return json.loads(base64.b64decode(r.json()["content"]).decode())
+    except Exception:
+        return []
+
+def listar_historico_pdd():
+    url = f"https://api.github.com/repos/{_gh_repo()}/contents/historico_pdd"
+    r   = _requests.get(url, headers=_gh_headers(), timeout=10)
+    if r.status_code != 200:
+        return []
+    return sorted(
+        [{"nome": a["name"], "url_download": a["download_url"], "sha": a["sha"]}
+         for a in r.json() if a["name"].endswith(".xlsx")],
+        key=lambda x: x["nome"], reverse=True,
+    )
+
+def baixar_excel_pdd(url_download):
+    r = _requests.get(url_download, timeout=60)
+    return r.content if r.status_code == 200 else None
 
 # ══════════════════════════════════════════════════════════════════════
 # INTERFACE STREAMLIT
 # ══════════════════════════════════════════════════════════════════════
 
-
-# Estilo customizado
 st.markdown("""
 <style>
-    .main-header {
-        background: linear-gradient(135deg, #1F2D5A 0%, #2E4189 100%);
-        color: white; padding: 1.5rem 2rem; border-radius: 10px;
-        margin-bottom: 1.5rem;
-    }
-    .main-header h1 { color: white; margin: 0; font-size: 1.6rem; }
-    .main-header p  { color: #D6DCF0; margin: 0.3rem 0 0; font-size: 0.9rem; }
-    .resultado-box {
-        background: #E2EFDA; border-left: 5px solid #1E7145;
-        padding: 1rem 1.5rem; border-radius: 6px; margin-top: 1rem;
-    }
-    .stMetric { background: #F0F3FB; border-radius: 8px; padding: 0.5rem; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+.main-header {
+    background: linear-gradient(135deg, #1F2D5A 0%, #2E4189 100%);
+    color: white; padding: 1.5rem 2rem; border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+.main-header h1 { color: white; margin: 0; font-size: 1.5rem; }
+.main-header p  { color: #D6DCF0; margin: 0.3rem 0 0; font-size: 0.85rem; }
+.hist-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; background: white; border-radius: 8px;
+    border: 1px solid #E8EDF5; margin-bottom: 6px;
+}
+.hist-data  { font-size: 11px; color: #8898AA; min-width: 75px; }
+.hist-label { font-size: 13px; font-weight: 700; color: #1F2D5A; flex: 1; }
+.hist-val   { font-size: 11px; color: #2E4189; font-weight: 600;
+              background: #EEF3FB; padding: 2px 8px; border-radius: 12px; }
 </style>
 """, unsafe_allow_html=True)
 
+# ── Sidebar: histórico ────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 📁 Histórico PDD C5")
+    tem_gh = _tem_secrets()
+
+    if not tem_gh:
+        st.warning("Configure GITHUB_TOKEN e GITHUB_REPO nos Secrets para ativar o histórico.")
+    else:
+        if st.button("🔄 Atualizar", key="refresh_pdd"):
+            st.cache_data.clear()
+        with st.spinner("Carregando histórico..."):
+            registros = carregar_indice_pdd()
+            hist_lista = listar_historico_pdd()
+
+        if not registros:
+            st.info("Nenhum cálculo salvo ainda.")
+        else:
+            st.markdown(f"**{len(registros)} cálculo(s) salvo(s)**")
+            st.markdown("---")
+            for reg in registros:
+                car  = reg.get('car', 0)
+                pdd  = reg.get('pdd', 0)
+                perc = reg.get('pct_ead', 0)
+                st.markdown(f"""
+                <div class="hist-row">
+                    <div class="hist-data">{reg.get('data_base','—')}</div>
+                    <div class="hist-label">{reg.get('data_base','—')}</div>
+                    <div class="hist-val">{perc:.1f}% EAD</div>
+                </div>
+                <div style="font-size:11px;color:#6B7A99;padding:0 14px 6px;">
+                    CAR: R$ {car:,.0f} &nbsp;|&nbsp; PDD: R$ {pdd:,.0f}
+                </div>
+                """, unsafe_allow_html=True)
+                match = next((h for h in hist_lista if h["nome"] == reg.get("arquivo")), None)
+                if match:
+                    dados = baixar_excel_pdd(match["url_download"])
+                    if dados:
+                        st.download_button(
+                            label="⬇️ Baixar Excel",
+                            data=dados,
+                            file_name=reg.get("arquivo", "pdd.xlsx"),
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"dl_pdd_{reg.get('arquivo')}",
+                        )
+                st.markdown("---")
+
+# ── Cabeçalho ─────────────────────────────────────────────────────────
 st.markdown("""
 <div class="main-header">
   <h1>📊 PDD Carteira C5 — SCD</h1>
@@ -549,51 +685,41 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Sidebar: data-base ────────────────────────────────────────
-with st.sidebar:
-    st.header("⚙️ Configuração")
-    data_base = st.date_input(
-        "📅 Data-base do fechamento",
-        value=datetime.today().replace(day=1),
-        help="Último dia do mês de referência (ex: 31/07/2026)"
-    )
-    st.divider()
-    st.caption("**Normas aplicadas:**")
-    st.caption("• BCB 352 / Circular 3.547/2011")
-    st.caption("• Res. BCB nº 4.966/2021")
-    st.caption("• Anexo II C5")
-    st.caption("• CADOC 3040 (TJE)")
+# ── Data-base ──────────────────────────────────────────────────────────
+data_base = st.date_input(
+    "📅 Data-base do fechamento",
+    value=datetime.today().replace(day=1),
+    help="Último dia do mês de referência"
+)
 
-# ── Seção 1: Upload CAR ───────────────────────────────────────
+st.divider()
+
+# ── Upload CAR ────────────────────────────────────────────────────────
 st.subheader("1️⃣  Base CAR — Contas a Receber")
-
 col1, col2 = st.columns([2, 1])
 with col1:
     car_file = st.file_uploader(
         "Arquivo CAR do mês (.xlsx)",
         type=["xlsx", "xls"],
-        help="Colunas necessárias: id_cobranca, valor_cobranca, contas_a_receber, aging_dias"
+        help="Colunas: id_cobranca, valor_cobranca, contas_a_receber, aging_dias"
     )
 with col2:
-    car_sheet = st.text_input(
-        "Nome da aba (deixe em branco para usar a primeira)",
-        placeholder="ex: DADOS 31-07"
-    )
+    car_sheet = st.text_input("Nome da aba (em branco = primeira)", placeholder="ex: DADOS 31-07")
 
 if car_file:
     xl = pd.ExcelFile(car_file)
     if not car_sheet:
         car_sheet = xl.sheet_names[0]
-    st.caption(f"✅ Arquivo carregado | Aba: **{car_sheet}** | Abas disponíveis: {xl.sheet_names}")
+    st.caption(f"✅ Arquivo carregado | Aba: **{car_sheet}** | Abas: {xl.sheet_names}")
 
 st.divider()
 
-# ── Seção 2: Cessões ──────────────────────────────────────────
+# ── Cessões ───────────────────────────────────────────────────────────
 st.subheader("2️⃣  Planilhas de Cessão (acumuladas)")
 st.info(
-    "Inclua **todas** as cessões desde o início da carteira. "
-    "**Tipo padrão** = colunas `ID COBRANÇA / VALOR FACE BOLETO / CESSÃO (data)`.  "
-    "**Tipo nova** = colunas `ID / VALOR FACE DIREITO ECONÔMICO / DIAS EM ATRASO`.",
+    "Inclua **todas** as cessões desde o início da carteira.  \n"
+    "**Tipo padrão** = `ID COBRANÇA / VALOR FACE BOLETO / CESSÃO (data)`  \n"
+    "**Tipo nova** = `ID / VALOR FACE DIREITO ECONÔMICO / DIAS EM ATRASO`",
     icon="ℹ️"
 )
 
@@ -601,9 +727,7 @@ if "cessoes" not in st.session_state:
     st.session_state["cessoes"] = []
 
 def add_cessao():
-    st.session_state["cessoes"].append({
-        "file": None, "sheet": "", "tipo": "padrao", "data_cessao": ""
-    })
+    st.session_state["cessoes"].append({"file": None, "sheet": "", "tipo": "padrao", "data_cessao": ""})
 
 def remove_cessao(i):
     st.session_state["cessoes"].pop(i)
@@ -614,144 +738,155 @@ for i, cess in enumerate(st.session_state["cessoes"]):
     with st.container(border=True):
         cols = st.columns([3, 1, 1, 2, 0.5])
         with cols[0]:
-            f = st.file_uploader(
-                f"Cessão #{i+1} — Arquivo",
-                type=["xlsx","xls"],
-                key=f"cess_file_{i}"
-            )
+            f = st.file_uploader(f"Cessão #{i+1}", type=["xlsx","xls"], key=f"cess_file_{i}")
             if f: st.session_state["cessoes"][i]["file"] = f
         with cols[1]:
-            t = st.selectbox(
-                "Tipo", ["padrao", "nova"],
-                key=f"cess_tipo_{i}",
-                help="padrao = colunas ID COBRANÇA | nova = colunas ID"
-            )
+            t = st.selectbox("Tipo", ["padrao","nova"], key=f"cess_tipo_{i}")
             st.session_state["cessoes"][i]["tipo"] = t
         with cols[2]:
-            sh = st.text_input("Aba", key=f"cess_sheet_{i}",
-                               placeholder="1ª aba")
+            sh = st.text_input("Aba", key=f"cess_sheet_{i}", placeholder="1ª aba")
             st.session_state["cessoes"][i]["sheet"] = sh or None
         with cols[3]:
             if t == "nova":
-                dc = st.text_input(
-                    "Data da cessão (DD/MM/AAAA)",
-                    key=f"cess_data_{i}",
-                    placeholder="ex: 16/07/2026"
-                )
+                dc = st.text_input("Data cessão (DD/MM/AAAA)", key=f"cess_data_{i}", placeholder="ex: 16/07/2026")
                 st.session_state["cessoes"][i]["data_cessao"] = dc
             else:
                 st.caption("Data lida da coluna CESSÃO")
         with cols[4]:
-            st.button("🗑️", key=f"del_{i}",
-                      on_click=remove_cessao, args=(i,))
+            st.button("🗑️", key=f"del_{i}", on_click=remove_cessao, args=(i,))
 
 st.divider()
 
-# ── Botão calcular ────────────────────────────────────────────
+# ── Botão calcular ─────────────────────────────────────────────────────
 calcular = st.button("🚀  Calcular PDD", type="primary", use_container_width=True)
 
 if calcular:
     erros = []
-    if not car_file:
-        erros.append("Faça o upload do arquivo CAR.")
-    if not st.session_state["cessoes"]:
-        erros.append("Adicione ao menos uma planilha de cessão.")
+    if not car_file:       erros.append("Faça o upload do arquivo CAR.")
+    if not st.session_state["cessoes"]: erros.append("Adicione ao menos uma cessão.")
     for i, c in enumerate(st.session_state["cessoes"]):
-        if not c.get("file"):
-            erros.append(f"Cessão #{i+1}: nenhum arquivo carregado.")
+        if not c.get("file"): erros.append(f"Cessão #{i+1}: nenhum arquivo carregado.")
 
     if erros:
-        for e in erros:
-            st.error(e)
+        for e in erros: st.error(e)
     else:
-        with st.spinner("Calculando..."):
+        with st.spinner("Calculando PDD..."):
             try:
                 # Ler CAR
                 car_file.seek(0)
                 df_car = ler_car(car_file, car_sheet or None)
-                st.success(f"✅ CAR: **{len(df_car):,}** cobranças | CAR total: R$ {df_car.contas_a_receber.sum():,.2f}")
 
                 # Ler cessões
                 cessoes_dfs = []
                 for i, c in enumerate(st.session_state["cessoes"]):
                     c["file"].seek(0)
                     df_c = ler_cessao(
-                        buf=c["file"],
-                        sheet=c.get("sheet"),
+                        buf=c["file"], sheet=c.get("sheet"),
                         tipo=c.get("tipo","padrao"),
-                        data_cessao_override=c.get("data_cessao") or None
+                        data_cessao_override=c.get("data_cessao") or None,
                     )
                     cessoes_dfs.append(df_c)
-                    st.success(f"✅ Cessão #{i+1}: **{len(df_c):,}** cob. | POCI: {df_c.is_poci.sum():,}")
 
-                df_cessoes = pd.concat(cessoes_dfs, ignore_index=True)
-                df_cessoes = df_cessoes.drop_duplicates('id').copy()
+                df_cessoes = pd.concat(cessoes_dfs, ignore_index=True).drop_duplicates('id').copy()
 
-                # Calcular PDD
+                # Calcular
                 data_base_dt = datetime(data_base.year, data_base.month, data_base.day)
                 df_res = calcular_pdd(df_car, df_cessoes)
 
-                S40  = round(df_res.v40.sum(), 2)
-                S50  = round(df_res.v50.sum(), 2)
-                S60  = round(df_res.v60.sum(), 2)
-                STOT = round(df_res.vtot.sum(), 2)
-                TCAR = round(df_res.contas_a_receber.sum(), 2)
-                TEAD = round(df_res.valor_cobranca.sum(), 2)
+                S40   = round(df_res.v40.sum(), 2)
+                S50   = round(df_res.v50.sum(), 2)
+                S60   = round(df_res.v60.sum(), 2)
+                STOT  = round(df_res.vtot.sum(), 2)
+                TCAR  = round(df_res.contas_a_receber.sum(), 2)
+                TEAD  = round(df_res.valor_cobranca.sum(), 2)
+                PCT   = round(STOT / TEAD * 100, 1) if TEAD else 0
 
-                # Exibir resultado
-                st.markdown("---")
-                st.subheader("📋 Resultado PDD")
-
-                m1,m2,m3,m4 = st.columns(4)
-                m1.metric("Cobranças ativas", f"{len(df_res):,}")
-                m2.metric("CAR Total", f"R$ {TCAR:,.0f}")
-                m3.metric("EAD (Face)", f"R$ {TEAD:,.0f}")
-                m4.metric("PDD Total (D)", f"R$ {STOT:,.0f}", delta=f"{STOT/TEAD*100:.1f}% EAD")
-
-                st.markdown("**Desdobramento por conta COSIF:**")
-                c1,c2,c3 = st.columns(3)
-                c1.metric("40-4 Perda Incorrida", f"R$ {S40:,.2f}")
-                c2.metric("50-7 Prov. Adicional (3,4%)", f"R$ {S50:,.2f}")
-                c3.metric("60-0 Perda Esperada", f"R$ {S60:,.2f}")
-
-                # Tabela resumo por grupo
-                st.markdown("**Resumo por faixa:**")
-                grp_view = df_res.groupby('grupo').agg(
-                    Qtd=('id_cobranca','count'),
-                    CAR=('contas_a_receber','sum'),
-                    PDD=('vtot','sum')
-                ).round(2)
-                grp_view['% PDD/CAR'] = (grp_view['PDD']/grp_view['CAR']*100).round(1)
-                grp_view = grp_view.sort_values('CAR', ascending=False)
-                st.dataframe(
-                    grp_view.style.format({
-                        'CAR': 'R$ {:,.2f}', 'PDD': 'R$ {:,.2f}', '% PDD/CAR': '{:.1f}%'
-                    }),
-                    use_container_width=True
-                )
-
-                # Gerar Excel e oferecer download
-                st.markdown("---")
-                st.subheader("⬇️ Download")
+                # Gerar Excel
                 excel_bytes = gerar_excel_bytes(df_res, data_base_dt)
-                fname = f"PDD_C5_COSIF_{data_base_dt.strftime('%d%m%Y')}_BCB352.xlsx"
-                st.download_button(
-                    label="📥  Baixar Excel (Premissas + COSIF + Composição)",
-                    data=excel_bytes,
-                    file_name=fname,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    type="primary",
-                )
-                st.caption(f"Arquivo: **{fname}** | 3 abas: Premissas e Metodologia | PDD C5 — COSIF Completo | Composição por Cobrança")
+                data_str    = data_base_dt.strftime('%d%m%Y')
+                nome_saida  = f"PDD_C5_COSIF_{data_str}_BCB352.xlsx"
+
+                # Salvar no session_state
+                st.session_state["pdd_resultado"]   = excel_bytes
+                st.session_state["pdd_df"]          = df_res
+                st.session_state["pdd_totais"]      = {"S40":S40,"S50":S50,"S60":S60,"STOT":STOT,"TCAR":TCAR,"TEAD":TEAD,"PCT":PCT}
+                st.session_state["pdd_nome_saida"]  = nome_saida
+                st.session_state["pdd_data_base"]   = data_base_dt
+
+                # Salvar no GitHub
+                if tem_gh:
+                    with st.spinner("Salvando histórico no GitHub..."):
+                        resumo = {
+                            "arquivo":   nome_saida,
+                            "data_base": data_base_dt.strftime("%d/%m/%Y"),
+                            "data":      datetime.now().strftime("%d/%m/%Y %H:%M"),
+                            "qtd":       len(df_res),
+                            "car":       TCAR,
+                            "ead":       TEAD,
+                            "pdd":       STOT,
+                            "pct_ead":   PCT,
+                            "v40":       S40,
+                            "v50":       S50,
+                            "v60":       S60,
+                        }
+                        ok, msg = salvar_pdd_github(nome_saida, excel_bytes, resumo)
+                        if ok:
+                            st.success("✅ Excel salvo no histórico (GitHub)!")
+                        else:
+                            st.warning(f"⚠️ Não foi possível salvar no GitHub: {msg}")
 
             except Exception as e:
                 st.error(f"❌ Erro durante o cálculo: {e}")
                 st.exception(e)
 
-# ── Rodapé ────────────────────────────────────────────────────
+# ── Resultado ─────────────────────────────────────────────────────────
+if st.session_state.get("pdd_resultado"):
+    t    = st.session_state["pdd_totais"]
+    df   = st.session_state["pdd_df"]
+
+    st.markdown("---")
+    st.subheader("📋 Resultado")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Cobranças", f"{len(df):,}")
+    m2.metric("CAR Total", f"R$ {t['TCAR']:,.0f}")
+    m3.metric("EAD (Face)", f"R$ {t['TEAD']:,.0f}")
+    m4.metric("PDD Total", f"R$ {t['STOT']:,.0f}", delta=f"{t['PCT']:.1f}% EAD")
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("40-4 Perda Incorrida",      f"R$ {t['S40']:,.2f}")
+    c2.metric("50-7 Prov. Adicional (3,4%)", f"R$ {t['S50']:,.2f}")
+    c3.metric("60-0 Perda Esperada",        f"R$ {t['S60']:,.2f}")
+
+    st.markdown("**Resumo por faixa:**")
+    grp_view = df.groupby('grupo').agg(
+        Qtd=('id_cobranca','count'),
+        CAR=('contas_a_receber','sum'),
+        PDD=('vtot','sum'),
+    ).round(2)
+    grp_view['% PDD/CAR'] = (grp_view['PDD'] / grp_view['CAR'] * 100).round(1)
+    st.dataframe(
+        grp_view.style.format({'CAR':'R$ {:,.2f}','PDD':'R$ {:,.2f}','% PDD/CAR':'{:.1f}%'}),
+        use_container_width=True,
+    )
+
+    st.markdown("---")
+    st.download_button(
+        label="📥  Baixar Excel (Premissas + COSIF + Composição)",
+        data=st.session_state["pdd_resultado"],
+        file_name=st.session_state["pdd_nome_saida"],
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+        type="primary",
+    )
+    st.caption(
+        f"Arquivo: **{st.session_state['pdd_nome_saida']}** | "
+        "3 abas: Premissas e Metodologia | PDD C5 — COSIF Completo | Composição por Cobrança"
+    )
+
+# ── Rodapé ────────────────────────────────────────────────────────────
 st.markdown("---")
-with st.expander("ℹ️ Sobre as premissas e regras aplicadas"):
+with st.expander("ℹ️ Premissas e regras aplicadas"):
     st.markdown(f"""
 **Normas:** BCB 352 (Circular 3.547/2011) / Resolução BCB nº 4.966/2021
 
@@ -761,9 +896,9 @@ with st.expander("ℹ️ Sobre as premissas e regras aplicadas"):
 | E2 — 61-90d | Aging ≤ 90d | CAR × 38% | 60-0 | 38% |
 | E3 — >90d | Inadimplido | CAR × Anexo II + 3,4% | 40-4 + 50-7 | 50% → 100% |
 | C1 POCI | Aging >630d | 100% liq.contábil | 40-4 | 100% |
-| C4 POCI | Aging 91-630d | CAR × Anexo II + 3,4% ≤ liq. | 40-4 + 50-7 | 50% → 100% |
+| C4 POCI | Aging 91-630d | CAR × Anexo II ≤ liq. | 40-4 + 50-7 | 50% → 100% |
 
-**TJE (CADOC 3040):** calculada **uma única vez na data de aquisição** — permanece fixa até a liquidação (método do custo amortizado).
-- E2: `TJE = (1/(1-deságio%))^(365/{PRAZO_E2_DIAS}) - 1`
-- E3/POCI: `TJE = ratio^(365/{PRAZO_E3_DIAS}) - 1` onde `ratio = (1-PECLD%)/(1-deságio%)`
+**TJE (CADOC 3040):** calculada **uma única vez na data de aquisição** — permanece fixa.
+- E2: `TJE = (1/(1-deságio%))^(365/450) - 1`
+- E3/POCI: `ratio = (1-PECLD%)/(1-deságio%); TJE = ratio^(365/1260) - 1`
     """)
