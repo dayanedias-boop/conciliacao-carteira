@@ -41,7 +41,8 @@ with col1:
             "novas, liquidadas, alteradas e sem movimentação."
         )
         st.caption("Chave: `id_cobranca`")
-        st.page_link("pages/1_Conciliacao.py", label="Abrir Conciliação →", icon="🔄")
+        if st.button("Abrir Conciliação →", key="btn_conc", use_container_width=True):
+            st.switch_page("pages/1_Conciliacao.py")
 
 with col2:
     with st.container(border=True):
@@ -51,7 +52,8 @@ with col2:
             "Resolução BCB nº 4.966/2021. Gera o arquivo COSIF completo."
         )
         st.caption("BCB 352 / Res. 4.966/2021")
-        st.page_link("pages/2_PDD_C5.py", label="Abrir PDD C5 →", icon="📊")
+        if st.button("Abrir PDD C5 →", key="btn_pdd", use_container_width=True):
+            st.switch_page("pages/2_PDD_C5.py")
 
 st.markdown("---")
 st.markdown(
