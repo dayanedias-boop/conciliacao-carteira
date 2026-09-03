@@ -1,5 +1,18 @@
 [
   {
+    "arquivo": "Conciliacao_Contas a receber SCD - 08-2026_20260903_1801.xlsx",
+    "data": "03/09/2026 18:01",
+    "label_ant": "Contas a receber SCD - 07_2026",
+    "label_atu": "Contas a receber SCD - 08-2026",
+    "total": 133579,
+    "novos": 22687,
+    "saiu": 40,
+    "alterados": 9842,
+    "sem_mov": 101010,
+    "car_ant": 34920720.84,
+    "car_atu": 40766422.66
+  },
+  {
     "arquivo": "Conciliacao_base_julho_20260807_0006.xlsx",
     "data": "07/08/2026 00:06",
     "label_ant": "base_junho",
