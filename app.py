@@ -927,14 +927,14 @@ with tab1:
                 label_ant=Path(f_ant.name).stem; label_atu=Path(f_atu.name).stem
                 conc=conciliar(df_ant,df_atu)
                 excel_bytes=gerar_excel_bytes_conc(conc,df_ant,df_atu,label_ant,label_atu)
-                nome_saida=f"Conciliacao_{label_atu}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                nome_saida=f"Conciliacao_{label_atu}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
                 st.session_state.resultado=excel_bytes; st.session_state.conc=conc
                 st.session_state.df_ant=df_ant; st.session_state.df_atu=df_atu
                 st.session_state.label_ant=label_ant; st.session_state.label_atu=label_atu
                 st.session_state.nome_saida=nome_saida
                 if tem_secrets:
                     with st.spinner("Salvando no GitHub..."):
-                        resumo={"arquivo":nome_saida,"data":datetime.datetime.now().strftime("%d/%m/%Y %H:%M"),
+                        resumo={"arquivo":nome_saida,"data":datetime.now().strftime("%d/%m/%Y %H:%M"),
                                 "label_ant":label_ant,"label_atu":label_atu,"total":len(conc),
                                 "novos":int((conc["tipo_movimentacao"]=="🟢 NOVO").sum()),
                                 "saiu":int((conc["tipo_movimentacao"]=="🔴 SAIU DA CARTEIRA").sum()),
