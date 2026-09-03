@@ -236,7 +236,7 @@ def gravar_aba_excel(wb,nome,df_d,titulo,tab_color,colunas):
             if pd.isna(val) if not isinstance(val,str) else val=="nan": val=None
             cel(c2,val,bg=bg,fmt=fmt,align=align)
 
-def gerar_excel_bytes(conc,df_ant,df_atu,label_ant,label_atu):
+def gerar_excel_bytes_conc(conc,df_ant,df_atu,label_ant,label_atu):
     wb=openpyxl.Workbook()
     ws_i=wb.active; ws_i.title="📋 Instruções"
     ws_i.sheet_view.showGridLines=False; ws_i.sheet_properties.tabColor=C_AZE
@@ -593,7 +593,7 @@ def mg(ws, r1, c1, r2, c2, v, bold=False, fc=WH, bg=DB,
     cell.alignment = Alignment(horizontal=ha, vertical="center", wrap_text=wrap)
     cell.border = tb()
 
-def gerar_excel_bytes(df, data_base):
+def gerar_excel_bytes_pdd(df, data_base):
     wb   = Workbook()
     dstr = data_base.strftime('%d/%m/%Y')
     S40  = round(df.v40.sum(), 2); S50 = round(df.v50.sum(), 2)
@@ -926,7 +926,7 @@ with tab1:
                 df_ant,_=ler_base(bytes_ant,f_ant.name); df_atu,_=ler_base(bytes_atu,f_atu.name)
                 label_ant=Path(f_ant.name).stem; label_atu=Path(f_atu.name).stem
                 conc=conciliar(df_ant,df_atu)
-                excel_bytes=gerar_excel_bytes(conc,df_ant,df_atu,label_ant,label_atu)
+                excel_bytes=gerar_excel_bytes_conc(conc,df_ant,df_atu,label_ant,label_atu)
                 nome_saida=f"Conciliacao_{label_atu}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
                 st.session_state.resultado=excel_bytes; st.session_state.conc=conc
                 st.session_state.df_ant=df_ant; st.session_state.df_atu=df_atu
@@ -1315,7 +1315,7 @@ with tab2:
                     PCT   = round(STOT / TEAD * 100, 1) if TEAD else 0
 
                     # Gerar Excel
-                    excel_bytes = gerar_excel_bytes(df_res, data_base_dt)
+                    excel_bytes = gerar_excel_bytes_pdd(df_res, data_base_dt)
                     data_str    = data_base_dt.strftime('%d%m%Y')
                     nome_saida  = f"PDD_C5_COSIF_{data_str}_BCB352.xlsx"
 
